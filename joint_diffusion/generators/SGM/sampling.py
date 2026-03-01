@@ -574,9 +574,15 @@ class ScoreSampler:
                 x, patch_h, patch_w, self.patch_overlap
             )
             if self.noise_model is not None:
-                # Initialize noise at full image size, then extract patches
+                # Initialize noise at full image size, then extract patches.
+                # Use forward_diffuse from zeros so n starts at the correct
+                # noise level sigma(t_start) instead of sigma(T) from prior.
                 n_full_shape = (self.batch_size, self.noise_shape[0], y.shape[2], y.shape[3])
-                n_full = self.sde.prior_sampling(n_full_shape).to(device)
+                if (self.start_diffusion is not None) and self.start_diffusion > 0:
+                    n_init = torch.zeros(n_full_shape, device=device)
+                    n_full = self.sde.forward_diffuse(n_init, t_batch)
+                else:
+                    n_full = self.sde.prior_sampling(n_full_shape).to(device)
                 n_patches, _ = self._extract_patches(
                     n_full, patch_h, patch_w, self.patch_overlap
                 )
@@ -589,7 +595,13 @@ class ScoreSampler:
             if self.noise_model is not None:
                 n = n_patches
         elif self.noise_model is not None and y is not None:
-            n = self.sde.prior_sampling(noise_shape).to(device)
+            # Use forward_diffuse from zeros so n starts at the correct
+            # noise level sigma(t_start) instead of sigma(T) from prior.
+            if (self.start_diffusion is not None) and self.start_diffusion > 0:
+                n_init = torch.zeros(noise_shape, device=device)
+                n = self.sde.forward_diffuse(n_init, t_batch)
+            else:
+                n = self.sde.prior_sampling(noise_shape).to(device)
 
         # Tracking
         if self.keep_track:

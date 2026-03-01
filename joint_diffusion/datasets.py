@@ -15,6 +15,8 @@ from torch.utils.data import Dataset, DataLoader
 _DATASETS = [
     "zea_tissue",
     "zea_haze",
+    "picmus_tissue",
+    "picmus_haze",
 ]
 
 
@@ -39,9 +41,13 @@ def get_dataset(config):
     print(f"Loading {dataset_name} dataset...")
 
     if dataset_name.lower() == "zea_tissue":
-        return _get_zea_dataset(config, "tissue")
+        return _get_rf_dataset(config, "zea_synth", "tissue")
     if dataset_name.lower() == "zea_haze":
-        return _get_zea_dataset(config, "haze")
+        return _get_rf_dataset(config, "zea_synth", "haze")
+    if dataset_name.lower() == "picmus_tissue":
+        return _get_rf_dataset(config, "picmus", "tissue")
+    if dataset_name.lower() == "picmus_haze":
+        return _get_rf_dataset(config, "picmus", "haze")
 
     raise ValueError(f"Dataset {dataset_name} not supported")
 
@@ -93,10 +99,16 @@ class ZeaDataset(Dataset):
 
 
 def _get_zea_dataset(config, kind: str):
-    """Load ZEA synthetic RF dataset (tissue or haze).
+    """Load ZEA synthetic RF dataset (thin wrapper around _get_rf_dataset)."""
+    return _get_rf_dataset(config, "zea_synth", kind)
+
+
+def _get_rf_dataset(config, subdir: str, kind: str):
+    """Load RF dataset from a named subdirectory (tissue or haze).
 
     Args:
         config: Configuration dict/object with data_root, batch_size, etc.
+        subdir: Subdirectory under data_root (e.g. "zea_synth", "picmus")
         kind: Either "tissue" or "haze"
 
     Returns:
@@ -111,11 +123,11 @@ def _get_zea_dataset(config, kind: str):
     limit_n = config.get("limit_n_samples", None)
     num_workers = config.get("num_workers", 0)
 
-    train_path = data_root / "zea_synth" / kind / "train.npz"
-    val_path = data_root / "zea_synth" / kind / "val.npz"
+    train_path = data_root / subdir / kind / "train.npz"
+    val_path = data_root / subdir / kind / "val.npz"
 
     if not train_path.exists():
-        raise FileNotFoundError(f"ZEA dataset not found: {train_path}")
+        raise FileNotFoundError(f"RF dataset not found: {train_path}")
 
     train_ds = ZeaDataset(train_path, npz_key, image_range, limit_n, training=True)
 

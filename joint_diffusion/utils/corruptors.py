@@ -106,31 +106,66 @@ class HazeCorruptor(Corruptor):
         self._haze_data = None
         self._haze_idx = 0
         
+        # Haze normalization stats (set after loading)
+        self._haze_data_min = None
+        self._haze_data_max = None
+
         # Try to load haze dataset for inference mode
         data_root = getattr(config, "data_root", None)
+        haze_data_subdir = getattr(config, "haze_data_subdir", "zea_synth")
         if data_root:
-            haze_path = Path(data_root) / "zea_synth" / "haze" / "val.npz"
+            haze_path = Path(data_root) / haze_data_subdir / "haze" / "val.npz"
             if haze_path.exists():
                 import numpy as np
                 npz_key = getattr(config, "npz_key", "rf")
-                self._haze_data = np.load(haze_path)[npz_key]
+                data = np.load(haze_path)[npz_key].astype(np.float32)
                 # Ensure channel-first format (N, C, H, W)
-                if self._haze_data.ndim == 3:
-                    self._haze_data = self._haze_data[:, np.newaxis, :, :]
-                print(f"Loaded haze data from {haze_path}: shape {self._haze_data.shape}")
+                if data.ndim == 3:
+                    data = data[:, np.newaxis, :, :]
+
+                # Apply ZeaDataset-style normalization so corrupt() sees
+                # properly companded data (same pipeline as training).
+                mu = 255
+                # Step 1: min-max normalize to [-1, 1]
+                self._haze_data_min = float(data.min())
+                self._haze_data_max = float(data.max())
+                if self._haze_data_max > self._haze_data_min:
+                    data = 2.0 * (data - self._haze_data_min) / (self._haze_data_max - self._haze_data_min) - 1.0
+                # Step 2: mu-law compress
+                data = np.sign(data) * np.log1p(mu * np.abs(data)) / np.log1p(mu)
+                # Step 3: rescale to image_range
+                lo, hi = getattr(config, "image_range", [0, 1])
+                data = (data + 1.0) / 2.0 * (hi - lo) + lo
+
+                self._haze_data = data
+                print(f"Loaded haze data from {haze_path}: shape {self._haze_data.shape}, "
+                      f"normalized to [{data.min():.3f}, {data.max():.3f}]")
+
+    @staticmethod
+    def mu_law_compress(x, mu=255):
+        """Mu-law companding compression: C(x) = sign(x) * log1p(mu * |x|) / log1p(mu)"""
+        return torch.sign(x) * torch.log1p(mu * torch.abs(x)) / torch.log1p(torch.tensor(mu, dtype=x.dtype, device=x.device))
+
+    @staticmethod
+    def mu_law_expand(x, mu=255):
+        """Mu-law companding expansion: C^{-1}(x) = sign(x) * ((1 + mu)^|x| - 1) / mu"""
+        return torch.sign(x) * ((1 + mu) ** torch.abs(x) - 1) / mu
 
     def corrupt(self, tissue, haze=None):
-        """Create hazy measurement: y = tissue + noise_stddev * haze.
+        """Create hazy measurement: y = C(C^{-1}(tissue) + gamma * C^{-1}(haze)).
+
+        Linear addition in RF domain, then recompand. This matches the
+        CompandedProjection guidance forward model in guidance.py.
 
         Args:
-            tissue: clean tissue RF data (B, C, H, W)
-            haze: haze RF data (B, C, H, W). If None, samples from loaded haze dataset.
+            tissue: clean tissue RF data in companded domain (B, C, H, W)
+            haze: haze RF data in companded domain (B, C, H, W). If None, samples from loaded haze dataset.
 
         Returns:
-            y: hazy measurement
+            y: hazy measurement in companded domain
         """
         import numpy as np
-        
+
         # If haze not provided, sample from loaded haze dataset
         if haze is None:
             if self._haze_data is None:
@@ -140,16 +175,20 @@ class HazeCorruptor(Corruptor):
                 )
             # Get batch size
             batch_size = tissue.shape[0]
-            
+
             # Sample haze (cycle through if needed)
             haze_indices = np.arange(self._haze_idx, self._haze_idx + batch_size) % len(self._haze_data)
             self._haze_idx = (self._haze_idx + batch_size) % len(self._haze_data)
-            
+
             haze = self._haze_data[haze_indices]
             haze = torch.from_numpy(haze).to(tissue.device).float()
-        
-        # Additive haze model: y = tissue + gamma * haze
+
+        # Additive haze model in RF domain: y_rf = tissue_rf + gamma * haze_rf
+        # Then recompand: y = C(y_rf)
         gamma = self.noise_stddev
-        y = tissue + gamma * haze
+        mu = 255
+        tissue_rf = self.mu_law_expand(tissue, mu)
+        haze_rf = self.mu_law_expand(haze, mu)
+        y = self.mu_law_compress(tissue_rf + gamma * haze_rf, mu)
         self.noise = haze
         return y
