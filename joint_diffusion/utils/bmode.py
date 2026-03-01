@@ -79,13 +79,21 @@ def _single_rf_to_bmode(rf_frame, dynamic_range=(-50, 0)):
     Returns:
         B-mode image as uint8 array.
     """
+    import torch
     pipeline, parameters = _get_pipeline(dynamic_range)
+    # Ensure torch tensor (zea with torch backend expects tensors)
+    if isinstance(rf_frame, np.ndarray):
+        rf_frame = torch.from_numpy(rf_frame).float()
+    elif isinstance(rf_frame, torch.Tensor):
+        rf_frame = rf_frame.detach().cpu().float()
     # Add channel dim: (n_tx, n_ax, n_el) -> (n_tx, n_ax, n_el, 1)
-    rf_data = rf_frame[:, :, :, np.newaxis]
+    rf_data = rf_frame.unsqueeze(-1)
     inputs = {pipeline.key: rf_data}
     outputs = pipeline(**inputs, **parameters)
     image = outputs[pipeline.output_key]
     image = zea.display.to_8bit(image, dynamic_range=dynamic_range)
+    if isinstance(image, torch.Tensor):
+        image = image.detach().cpu().numpy()
     return image
 
 

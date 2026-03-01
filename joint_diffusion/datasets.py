@@ -29,7 +29,7 @@ def get_dataset(config):
         tuple(DataLoader, DataLoader)
             Tuple of train-, and val-dataloader respectively
     """
-    dataset_name = config["dataset_name"]
+    dataset_name = config.get("dataset_name") if hasattr(config, "get") else config["dataset_name"]
 
     assert (
         dataset_name.lower() in _DATASETS

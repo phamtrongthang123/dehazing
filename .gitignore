@@ -175,3 +175,4 @@ dehazing-diffusion/joint_diffusion/images/
 # IDE and tool configs
 .vscode/
 .claude/
+paper/

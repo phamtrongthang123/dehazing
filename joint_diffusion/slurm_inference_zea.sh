@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=infer_zea
 #SBATCH --time=1-00:00:00
-#SBATCH --output=/scrfs/storage/tp030/home/f2f_ldm/slurm_logs/infer_%N_%j.out
+#SBATCH --output=/scrfs/storage/tp030/home/dehazing/slurm_logs/infer_%N_%j.out
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
@@ -14,10 +14,10 @@ echo "Running on node: $(hostname)"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Running: ZEA Dehazing Inference"
 
-mkdir -p /scrfs/storage/tp030/home/f2f_ldm/slurm_logs
+mkdir -p /scrfs/storage/tp030/home/dehazing/slurm_logs
 
-ROOT_DIR="/scrfs/storage/tp030/home/f2f_ldm"
-SCRIPT_DIR="$ROOT_DIR/dehazing-diffusion/joint_diffusion"
+ROOT_DIR="/scrfs/storage/tp030/home"
+SCRIPT_DIR="$ROOT_DIR/dehazing/joint_diffusion"
 
 # apptainer exec --nv --writable-tmpfs \
 #   --bind /scrfs/storage/tp030/home:/scrfs/storage/tp030/home \
@@ -35,7 +35,8 @@ apptainer exec --nv --writable-tmpfs \
   "$HOME/qwen3vl-cu128.sif" \
   bash -c "
     set -euo pipefail
-    source $ROOT_DIR/.venv_joint/bin/activate
+    source /home/tp030/.conda/etc/profile.d/conda.sh 2>/dev/null || source /opt/conda/etc/profile.d/conda.sh
+    conda activate dehazing
     cd $SCRIPT_DIR
 
     echo '=== Environment ==='

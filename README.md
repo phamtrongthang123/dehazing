@@ -34,25 +34,29 @@ python synthesize_dataset.py --out-dir /path/to/data/zea_synth --n-train 1000 --
 
 Train the tissue (score) and haze (corruptor) models:
 
-Two score models are trained independently:
+Two score models are trained independently for 350 epochs (~2.5 hours on A6000):
 
 | Model | Config | Dataset | Description |
 |-------|--------|---------|-------------|
 | Tissue (score) | `configs/training/score_zea_tissue.yaml` | `zea_tissue` | Clean tissue RF distribution |
 | Haze (corruptor) | `configs/training/score_zea_haze.yaml` | `zea_haze` | Haze noise distribution |
+
+Run locally (recommended):
+
 ```bash
 cd joint_diffusion
+CUDA_VISIBLE_DEVICES=0 bash train_run.sh tissue
+CUDA_VISIBLE_DEVICES=1 bash train_run.sh haze
+```
+
+Or via SLURM:
+
+```bash
 sbatch slurm_train_tissue.sh
 sbatch slurm_train_haze.sh
 ```
-Checkpoints are saved to `wandb/run-<timestamp>-<id>/files/training_checkpoints/`.
 
-Or run directly:
-
-```bash
-python train.py -c configs/training/score_zea_tissue.yaml --data_root /path/to/data
-python train.py -c configs/training/score_zea_haze.yaml --data_root /path/to/data
-```
+Checkpoints are saved every 10 epochs to `wandb/run-<timestamp>-<id>/files/training_checkpoints/`.
 
 ### 3. Run Inference
 
