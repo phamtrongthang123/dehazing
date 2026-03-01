@@ -44,7 +44,7 @@ _MODEL_NAMES = {
     "noise": "Noise",
     "gan": "GAN",
     "glow": "FLOW",
-    "sgm": "DIFFUSION",
+    "sgm": "Dehazed",
     "sgm_dps": "DPS",
     "sgm_proj": "Proj.",
     "sgm_pigdm": r"$\Pi$GDM",
@@ -284,7 +284,11 @@ class Denoiser(abc.ABC):
             return x
 
         if display_bmode:
-            from utils.bmode import rf_to_bmode, extent_mm, undo_normalization
+            bmode_module = self.config.get("bmode_module", "zea")
+            if bmode_module == "picmus":
+                from utils.bmode_picmus import rf_to_bmode, extent_mm, undo_normalization
+            else:
+                from utils.bmode import rf_to_bmode, extent_mm, undo_normalization
 
             dynamic_range = tuple(self.config.get("dynamic_range", [-50, 0]))
 
@@ -339,13 +343,34 @@ class Denoiser(abc.ABC):
             if target_imgs is not None:
                 titles.append("Ground Truth")
                 samples_list.append(target_imgs)
-            titles.append("Noisy")
+            titles.append("Hazy Input")
             samples_list.append(noisy_imgs)
             titles.append(self.model_names.get(self.name, self.name))
             samples_list.append(denoised_imgs)
             if noise_samples is not None:
-                titles.append("Noise Posterior")
-                samples_list.append(to_bmode(noise_samples, "noise_post"))
+                # Noise posterior comes from the haze model, which was trained
+                # on haze data with different normalization stats.  Use the
+                # haze-specific data_min/data_max stored on the corruptor.
+                haze_data_min = getattr(self.corruptor, '_haze_data_min', data_min)
+                haze_data_max = getattr(self.corruptor, '_haze_data_max', data_max)
+
+                def to_bmode_haze(x, label=""):
+                    if isinstance(x, torch.Tensor):
+                        x = x.detach().cpu().numpy()
+                    print(f"[{label}] raw normalized: min={x.min():.6f}, max={x.max():.6f}, mean={x.mean():.6f}, std={x.std():.6f}")
+                    x = np.clip(x, self.vmin, self.vmax)
+                    x = undo_normalization(
+                        x, image_range=(self.vmin, self.vmax),
+                        data_min=haze_data_min, data_max=haze_data_max,
+                    )
+                    print(f"[{label}] after undo_norm: min={x.min():.6f}, max={x.max():.6f}, mean={x.mean():.6f}")
+                    bmode = rf_to_bmode(x, dynamic_range=dynamic_range)
+                    b0 = np.asarray(bmode[0])
+                    print(f"[{label}] bmode[0]: min={b0.min()}, max={b0.max()}, mean={b0.mean():.1f}")
+                    return bmode
+
+                titles.append("Haze Estimate")
+                samples_list.append(to_bmode_haze(noise_samples, "noise_post"))
             # Add diff column: |GT - Denoised| in B-mode pixel space
             if target_imgs is not None:
                 diff_imgs = []
@@ -353,18 +378,18 @@ class Denoiser(abc.ABC):
                     ta, da = np.asarray(t, dtype=np.float32), np.asarray(d, dtype=np.float32)
                     diff = np.abs(ta - da).clip(0, 255).astype(np.uint8)
                     diff_imgs.append(diff)
-                titles.append("|GT - Denoised|")
+                titles.append("|Residual|")
                 samples_list.append(diff_imgs)
         else:
             if target is not None:
                 titles.append("Ground Truth")
                 samples_list.append(target)
-            titles.append("Noisy")
+            titles.append("Hazy Input")
             samples_list.append(noisy)
             titles.append(self.model_names.get(self.name, self.name))
             samples_list.append(denoised)
             if noise_samples is not None:
-                titles.append("Noise Posterior")
+                titles.append("Haze Estimate")
                 samples_list.append(to_numpy(noise_samples))
 
         for n in range(num_img):

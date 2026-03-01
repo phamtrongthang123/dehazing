@@ -5,7 +5,7 @@ data_root: /scrfs/storage/tp030/home/f2f_ldm/data
 run_name: zea_tissue
 # checkpoints
 run_id:
-  sgm: /home/tp030/f2f_ldm/dehazing-diffusion/joint_diffusion/wandb/run-20260131_003253-4fo3e9ll/files
+  sgm: /scrfs/storage/tp030/home/dehazing/joint_diffusion/wandb/run--jm8ljbms/files
 # device
 device: 0
 # random seed
@@ -42,16 +42,16 @@ models:
 
 sgm:
   ccdf: 0.8
-  lambda_coeff: 0.5
-  kappa_coeff: 0.5
+  lambda_coeff: 0.1
+  kappa_coeff: 0.1
   # number of noise scales (i.e. time steps in SDE)
-  num_scales: 200
+  num_scales: 1000
   sde: simple
   sigma: 25
   sampling_method: pc
   predictor: euler_maruyama
   corrector: none
   guidance: companded_projection
-  corruptor_run_id: /home/tp030/f2f_ldm/dehazing-diffusion/joint_diffusion/wandb/run-20260131_003249-qdynkwsc/files
+  corruptor_run_id: /scrfs/storage/tp030/home/dehazing/joint_diffusion/wandb/run--1bj42atz/files
   batch_size: 8
   patch_overlap: 6

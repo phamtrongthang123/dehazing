@@ -5,7 +5,7 @@ Converts raw RF data to B-mode images using the ZEA beamforming pipeline
 """
 
 import os
-os.environ.setdefault("KERAS_BACKEND", "torch")
+os.environ["KERAS_BACKEND"] = "numpy"
 os.environ.setdefault("ZEA_DISABLE_CACHE", "1")
 
 import numpy as np
@@ -79,14 +79,18 @@ def _single_rf_to_bmode(rf_frame, dynamic_range=(-50, 0)):
     Returns:
         B-mode image as uint8 array.
     """
+    import torch
     pipeline, parameters = _get_pipeline(dynamic_range)
+    # Ensure numpy array (zea with numpy backend expects arrays)
+    if isinstance(rf_frame, torch.Tensor):
+        rf_frame = rf_frame.detach().cpu().numpy()
     # Add channel dim: (n_tx, n_ax, n_el) -> (n_tx, n_ax, n_el, 1)
     rf_data = rf_frame[:, :, :, np.newaxis]
     inputs = {pipeline.key: rf_data}
     outputs = pipeline(**inputs, **parameters)
     image = outputs[pipeline.output_key]
     image = zea.display.to_8bit(image, dynamic_range=dynamic_range)
-    return image
+    return np.asarray(image)
 
 
 def undo_normalization(data, image_range=(-1, 1), mu=255, data_min=None, data_max=None):

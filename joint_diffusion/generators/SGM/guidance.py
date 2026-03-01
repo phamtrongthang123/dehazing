@@ -271,7 +271,7 @@ class CompandedProjection(Guidance):
         mu = self.mu
 
         with torch.enable_grad():
-            y_hat = self.sde.forward_diffuse(y, t_batch)
+            y_hat, _ = self.sde.marginal_prob(y, t_batch)
             x_var = x.detach().requires_grad_(True)
 
             # Clamp to C^{-1} domain [-1, 1] (paper Eq 220)
@@ -296,7 +296,7 @@ class CompandedProjection(Guidance):
         mu = self.mu
 
         with torch.enable_grad():
-            y_hat = self.sde.forward_diffuse(y, t_batch)
+            y_hat, _ = self.sde.marginal_prob(y, t_batch)
 
             x_var = x.detach().requires_grad_(True)
             n_var = n.detach().requires_grad_(True)

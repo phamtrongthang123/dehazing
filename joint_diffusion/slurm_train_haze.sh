@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=train_haze
 #SBATCH --time=3-00:00:00
-#SBATCH --output=/scrfs/storage/tp030/home/f2f_ldm/slurm_logs/haze_%N_%j.out
+#SBATCH --output=/scrfs/storage/tp030/home/dehazing/slurm_logs/haze_%N_%j.out
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=64
-#SBATCH --partition=agpu72
+#SBATCH --partition=agpu
 #SBATCH --constraint=1a100
 
 echo "Job started at: $(date)"
@@ -14,17 +14,19 @@ echo "Running on node: $(hostname)"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Training: HAZE model"
 
-mkdir -p /scrfs/storage/tp030/home/f2f_ldm/slurm_logs
+mkdir -p /scrfs/storage/tp030/home/dehazing/slurm_logs
 
-ROOT_DIR="/scrfs/storage/tp030/home/f2f_ldm"
-SCRIPT_DIR="$ROOT_DIR/dehazing-diffusion/joint_diffusion"
+ROOT_DIR="/scrfs/storage/tp030/home"
+SCRIPT_DIR="$ROOT_DIR/dehazing/joint_diffusion"
 
 apptainer exec --nv --writable-tmpfs \
   --bind /scrfs/storage/tp030/home:/scrfs/storage/tp030/home \
+  --bind /home/tp030:/home/tp030 \
   "$HOME/qwen3vl-cu128.sif" \
   bash -c "
     set -euo pipefail
-    source $ROOT_DIR/.venv_joint/bin/activate
+    source /home/tp030/.conda/etc/profile.d/conda.sh 2>/dev/null || source /opt/conda/etc/profile.d/conda.sh
+    conda activate dehazing
     cd $SCRIPT_DIR
 
     echo '=== Environment ==='
@@ -35,9 +37,10 @@ apptainer exec --nv --writable-tmpfs \
 
     echo ''
     echo '=== Training HAZE model ==='
+    export WANDB_MODE=disabled
     python train.py \
         -c configs/training/score_zea_haze.yaml \
-        --data_root $ROOT_DIR/data
+        --data_root $ROOT_DIR/f2f_ldm/data
   "
 
 echo "Job finished at: $(date)"

@@ -1,10 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-ROOT_DIR="/scrfs/storage/tp030/home/f2f_ldm"
-SCRIPT_DIR="$ROOT_DIR/dehazing-diffusion/joint_diffusion"
+ROOT_DIR="/scrfs/storage/tp030/home"
+SCRIPT_DIR="$ROOT_DIR/dehazing/joint_diffusion"
 
-source "$ROOT_DIR/.venv_joint/bin/activate"
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate dehazing
 cd "$SCRIPT_DIR"
 
 echo "=== Environment ==="
