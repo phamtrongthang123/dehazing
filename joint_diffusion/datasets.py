@@ -15,6 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 _DATASETS = [
     "zea_tissue",
     "zea_haze",
+    "zea_generated_tissue",
     "picmus_tissue",
     "picmus_haze",
 ]
@@ -44,6 +45,8 @@ def get_dataset(config):
         return _get_rf_dataset(config, "zea_synth", "tissue")
     if dataset_name.lower() == "zea_haze":
         return _get_rf_dataset(config, "zea_synth", "haze")
+    if dataset_name.lower() == "zea_generated_tissue":
+        return _get_rf_dataset(config, "zea_synth_generated", "tissue")
     if dataset_name.lower() == "picmus_tissue":
         return _get_rf_dataset(config, "picmus", "tissue")
     if dataset_name.lower() == "picmus_haze":

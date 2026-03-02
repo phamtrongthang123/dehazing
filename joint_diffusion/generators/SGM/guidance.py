@@ -255,6 +255,12 @@ class CompandedProjection(Guidance):
         super().__init__(sde, corruptor, lambda_coeff, kappa_coeff)
         self.mu = mu
 
+    def rt_squared(self, x, t):
+        """r_t^2 = sigma_t^2 / (sigma_t^2 + 1) — posterior variance scaling."""
+        sigma_t_squared = self.sde.marginal_prob(x, t)[1] ** 2
+        r_t_squared = sigma_t_squared / (sigma_t_squared + 1)
+        return r_t_squared
+
     @staticmethod
     def mu_law_compress(x, mu=255):
         """Mu-law companding compression: C(x) = sign(x) * log1p(mu * |x|) / log1p(mu)"""
@@ -282,7 +288,10 @@ class CompandedProjection(Guidance):
             loss = torch.sum((y_hat - x_pred) ** 2)
             grad_x = torch.autograd.grad(loss, x_var)[0]
 
-        x = x - self.lambda_coeff * grad_x
+        r_t_squared = self.rt_squared(x_var, t_batch)
+        while r_t_squared.dim() < x.dim():
+            r_t_squared = r_t_squared.unsqueeze(-1)
+        x = x - self.lambda_coeff * r_t_squared * grad_x
         return x
 
     def joint_denoise_update(self, y, x, n, t, *args):
@@ -314,8 +323,11 @@ class CompandedProjection(Guidance):
 
             grad_x, grad_n = torch.autograd.grad(loss, [x_var, n_var])
 
-        x = x - self.lambda_coeff * grad_x
-        n = n - self.kappa_coeff * grad_n
+        r_t_squared = self.rt_squared(x_var, t_batch)
+        while r_t_squared.dim() < x.dim():
+            r_t_squared = r_t_squared.unsqueeze(-1)
+        x = x - self.lambda_coeff * r_t_squared * grad_x
+        n = n - self.kappa_coeff * r_t_squared * grad_n
 
         return x, n
 

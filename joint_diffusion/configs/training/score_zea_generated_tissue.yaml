@@ -1,10 +1,13 @@
+# Training config for pipeline validation: train on ZEA-generated synthetic data
+# Identical to score_zea_tissue.yaml except dataset_name points to generated data
+
 # Training parameters
 epochs:
   desc: Number of epochs to train over
-  value: 500
+  value: 350
 batch_size:
   desc: Size of each mini-batch
-  value: 4
+  value: 8
 seed:
   desc: Random seed for reproducibility experiments
   value: 1234
@@ -45,7 +48,7 @@ num_scales:
   value: 1000
 reduce_mean:
   desc: reduction type of loss function
-  value: true
+  value: false
 likelihood_weighting:
   desc: null
   value: false
@@ -94,10 +97,10 @@ data_root:
   value: null
 dataset_name:
   desc: Name of the dataset
-  value: picmus_tissue
+  value: zea_generated_tissue
 image_size:
   desc: Size of image [axial, lateral].
-  value: [1024, 128]
+  value: [1024, 64]
 image_range:
   desc: Tuple with range of input image neural network.
   value: [-1, 1]

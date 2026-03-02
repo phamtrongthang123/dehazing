@@ -601,13 +601,42 @@ class SGMDenoiser(Denoiser):
 
         # Load checkpoint
         ckpt = ModelCheckpoint(self.model, config=self.config)
-        ckpt.restore(self.config.get("checkpoint_file"))
+        checkpoint = ckpt.restore(self.config.get("checkpoint_file"))
+        # Optionally load EMA weights (set use_ema: false in config to disable)
+        if self.config.get("use_ema", True):
+            self._load_ema_weights(checkpoint)
 
         # Load corruptor model for joint inference (e.g., haze model for dehazing)
         self._load_corruptor_model()
 
         # Setup sampler
         self.set_sampler()
+
+    def _load_ema_weights(self, checkpoint):
+        """Replace model weights with EMA shadow weights if available.
+
+        EMA-averaged weights produce significantly better score estimates
+        for diffusion sampling than raw training weights.
+        """
+        ema_state = checkpoint.get("ema_state_dict")
+        if ema_state is None:
+            return
+
+        shadow = ema_state.get("shadow")
+        if shadow is None or not isinstance(shadow, dict):
+            return
+
+        # Load EMA shadow weights into the model
+        model_sd = self.model.state_dict()
+        updated = 0
+        for k, v in shadow.items():
+            if k in model_sd:
+                model_sd[k] = v
+                updated += 1
+
+        if updated > 0:
+            self.model.load_state_dict(model_sd)
+            print(f"Loaded EMA weights ({updated} parameters)")
 
     def _load_corruptor_model(self):
         """Load corruptor noise model from corruptor_run_id if specified."""
@@ -640,14 +669,28 @@ class SGMDenoiser(Denoiser):
         noise_model = noise_model.to(self.device)
         noise_model.eval()
         
-        # Load checkpoint
+        # Load checkpoint (prefer EMA weights)
         corr_ckpt = ModelCheckpoint(noise_model, config=corr_config)
-        corr_ckpt.restore()
-        
+        corr_checkpoint = corr_ckpt.restore()
+
+        # Optionally load EMA weights for corruptor model
+        if self.config.get("use_ema", True):
+            ema_state = corr_checkpoint.get("ema_state_dict")
+            if ema_state and isinstance(ema_state.get("shadow"), dict):
+                model_sd = noise_model.state_dict()
+                updated = 0
+                for k, v in ema_state["shadow"].items():
+                    if k in model_sd:
+                        model_sd[k] = v
+                        updated += 1
+                if updated > 0:
+                    noise_model.load_state_dict(model_sd)
+                    print(f"Loaded corruptor EMA weights ({updated} parameters)")
+
         # Attach to corruptor
         self.corruptor.model = noise_model
         self.corruptor.image_shape = corr_config.image_shape
-        
+
         print(f"Loaded corruptor model: {type(noise_model).__name__}")
 
     def set_sampler(self):
