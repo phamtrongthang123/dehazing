@@ -1,0 +1,1 @@
+**1 GPU** for dev (no multi-GPU training). if you need hpc, **SLURM partitions:** Only use `vgpu` and `agpu` partitions. Do not submit jobs to any other partition. See example_slurm.sh
