@@ -15,6 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 _DATASETS = [
     "zea_tissue",
     "zea_haze",
+    "zea_generated_tissue",
     "picmus_tissue",
     "picmus_haze",
 ]
@@ -44,6 +45,8 @@ def get_dataset(config):
         return _get_rf_dataset(config, "zea_synth", "tissue")
     if dataset_name.lower() == "zea_haze":
         return _get_rf_dataset(config, "zea_synth", "haze")
+    if dataset_name.lower() == "zea_generated_tissue":
+        return _get_rf_dataset(config, "zea_synth_generated", "tissue")
     if dataset_name.lower() == "picmus_tissue":
         return _get_rf_dataset(config, "picmus", "tissue")
     if dataset_name.lower() == "picmus_haze":
@@ -95,7 +98,12 @@ class ZeaDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        x = self.data[idx]
+        if self.training:
+            # Random horizontal flip (lateral direction) — valid for ultrasound tissue
+            if torch.rand(1).item() > 0.5:
+                x = torch.flip(x, dims=[2])
+        return x
 
 
 def _get_zea_dataset(config, kind: str):
