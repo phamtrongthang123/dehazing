@@ -1,0 +1,74 @@
+#!/bin/bash
+#SBATCH --job-name=train_pi_v7
+#SBATCH --time=12:00:00
+#SBATCH --output=/scrfs/storage/tp030/home/dehazing/slurm_logs/train_picmus_v7_%N_%j.out
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --partition=agpu
+#SBATCH --constraint=1a100
+#SBATCH --exclude=c2110,c2008
+
+echo "Job started at: $(date)"
+echo "Running on node: $(hostname)"
+echo "Job ID: $SLURM_JOB_ID"
+
+ROOT_DIR="/scrfs/storage/tp030/home"
+SCRIPT_DIR="$ROOT_DIR/dehazing/joint_diffusion"
+
+source "$(conda info --base)/etc/profile.d/conda.sh" 2>/dev/null || source /home/tp030/.conda/etc/profile.d/conda.sh
+conda activate dehazing 2>/dev/null || true
+PYTHON=/home/tp030/.conda/envs/dehazing/bin/python
+
+cd "$SCRIPT_DIR"
+export WANDB_MODE=disabled
+
+DATA_ROOT="$ROOT_DIR/f2f_ldm/data"
+
+# Find v5 run dir: newest, excluding all known pre-v5 and v6 run IDs
+# v6 run ID will be added once known; for now exclude all pre-v5 runs
+KNOWN_RUNS_PRE_V5="run--cs2128ri\|run--ez1mqfie\|run--xnhklvch\|run--77l53ue1\|run--w1lwubg5\|run--xci958q7\|run--41t5d8xd\|run--1bj42atz\|run--jm8ljbms"
+# v5 run is run--n1kp0qeb (hardcoded since known)
+V5_FILES="$SCRIPT_DIR/wandb/run--n1kp0qeb/files"
+V5_CKPT_DIR="$V5_FILES/training_checkpoints"
+V5_LAST_CKPT=$(ls "$V5_CKPT_DIR"/ckpt-*.pt 2>/dev/null | sort -t'-' -k2 -n | tail -1)
+
+echo "v5 run dir: $V5_FILES"
+echo "v5 latest checkpoint: $V5_LAST_CKPT"
+
+if [ -z "$V5_LAST_CKPT" ]; then
+    echo "ERROR: No v5 checkpoint found. Exiting."
+    exit 1
+fi
+
+echo ""
+echo "Starting PICMUS tissue v7 training (fine-tune v5 with t-importance, alpha=0.3)..."
+
+# Snapshot existing run dirs BEFORE training so we can identify the new v7 dir
+ls -d "$SCRIPT_DIR/wandb/run--"*/ 2>/dev/null | sort > /tmp/v7_runs_before.txt
+
+$PYTHON -u train.py \
+    -c "configs/training/score_picmus_tissue_v7.yaml" \
+    --data_root "$DATA_ROOT" \
+    --resume "$V5_LAST_CKPT"
+
+# Identify the new v7 run dir: the dir present AFTER training but not BEFORE
+ls -d "$SCRIPT_DIR/wandb/run--"*/ 2>/dev/null | sort > /tmp/v7_runs_after.txt
+V7_RUN_DIR=$(comm -13 /tmp/v7_runs_before.txt /tmp/v7_runs_after.txt | head -1)
+if [ -z "$V7_RUN_DIR" ]; then
+    # Fallback: newest dir excluding pre-v7 known runs
+    KNOWN_RUNS_PRE_V7="$KNOWN_RUNS_PRE_V5\|run--n1kp0qeb"
+    V7_RUN_DIR=$(ls -td "$SCRIPT_DIR/wandb/run--"*/ | grep -v "$KNOWN_RUNS_PRE_V7" | head -1)
+fi
+V7_FILES="${V7_RUN_DIR}files"
+echo "V7 run dir: $V7_FILES"
+
+# Save run dir for score quality job (use shared filesystem, not /tmp which is node-local)
+echo "$V7_RUN_DIR" > "$SCRIPT_DIR/v7_run_dir.txt"
+
+# Copy config to wandb dir for later score quality checks
+cp configs/training/score_picmus_tissue_v7.yaml "${V7_FILES}/config.yaml" 2>/dev/null || true
+
+echo "Job finished at: $(date)"

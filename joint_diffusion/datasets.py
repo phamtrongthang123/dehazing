@@ -98,7 +98,12 @@ class ZeaDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        x = self.data[idx]
+        if self.training:
+            # Random horizontal flip (lateral direction) — valid for ultrasound tissue
+            if torch.rand(1).item() > 0.5:
+                x = torch.flip(x, dims=[2])
+        return x
 
 
 def _get_zea_dataset(config, kind: str):

@@ -38,6 +38,9 @@ from utils.utils import load_config_from_yaml, set_random_seed, update_dict
 RESULTS_DIR = Path("sweep_results/picmus")
 INF_CONFIG_PATH = Path("configs/inference/paper/picmus_dehaze_pigdm.yaml")
 
+# Module-level override — set by main() from --inf_config arg
+_inf_config_path_override = None
+
 
 def compute_metrics(target, denoised, image_range=(0, 1)):
     """Compute PSNR and SSIM between target and denoised arrays.
@@ -85,7 +88,8 @@ def build_config(overrides: dict, image_shape=None):
 
     Returns merged config ready for SGMDenoiser.
     """
-    inf_cfg = load_config_from_yaml(INF_CONFIG_PATH)
+    cfg_path = Path(_inf_config_path_override) if _inf_config_path_override else INF_CONFIG_PATH
+    inf_cfg = load_config_from_yaml(cfg_path)
 
     # Apply overrides to top-level and sgm sub-dict
     for k, v in overrides.items():
@@ -381,10 +385,16 @@ def main():
                         help="Best lambda from Phase 2 (required for phase 3)")
     parser.add_argument("--best_kappa", type=float, default=None,
                         help="Best kappa from Phase 2 (required for phase 3)")
+    parser.add_argument("--inf_config", type=str, default=None,
+                        help="Override inference config YAML path (default: configs/inference/paper/picmus_dehaze_pigdm.yaml)")
     args = parser.parse_args()
 
     os.environ["WANDB_MODE"] = "disabled"
     set_random_seed(1234)
+
+    global _inf_config_path_override
+    if args.inf_config:
+        _inf_config_path_override = args.inf_config
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 

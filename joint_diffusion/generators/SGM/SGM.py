@@ -214,7 +214,17 @@ class ScoreNet(nn.Module):
         eps = 1e-5
         device = batch.device
 
-        t = torch.rand(batch.shape[0], device=device) * (self.sde.T - eps) + eps
+        # Optional t-importance sampling: bias toward small t (where score quality is measured)
+        # Convention: alpha < 1 biases toward small t (e.g. alpha=0.3 → ~25x more samples at t<0.01)
+        # Formula: t = eps + (T-eps) * u^(1/alpha), u ~ U[0,1]
+        #   PDF: f(t) ∝ t^(alpha-1), alpha<1 → decreasing → small t preferred
+        #   alpha=1.0 is uniform (default, backward-compatible)
+        alpha = getattr(self.config, 't_importance_alpha', 1.0)
+        if alpha != 1.0 and alpha > 0:
+            u = torch.rand(batch.shape[0], device=device)
+            t = eps + (self.sde.T - eps) * u.pow(1.0 / alpha)
+        else:
+            t = torch.rand(batch.shape[0], device=device) * (self.sde.T - eps) + eps
         z = torch.randn_like(batch)
         mean, std = self.sde.marginal_prob(batch, t)
 
